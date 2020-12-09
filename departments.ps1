@@ -58,8 +58,10 @@ function Get-RAETXMLManagers {
     }
 }
 
+Write-Verbose -Verbose "[Departments] Import started"
+
 # Init variables
-$xmlPath = "\\Network\HelloID\BintXML"
+$xmlPath = "\\Network\HelloID\HRCoreExport"
 
 # Get the source data
 $departments = New-Object System.Collections.ArrayList
@@ -76,6 +78,7 @@ $departments | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $n
 $departments | Add-Member -MemberType NoteProperty -Name "Name" -Value $null -Force
 $departments | Add-Member -MemberType NoteProperty -Name "ManagerExternalId" -Value $null -Force
 $departments | Add-Member -MemberType NoteProperty -Name "ParentExternalId" -Value $null -Force
+
 $departments | ForEach-Object {
     $_.ExternalId = $_.orgEenheidID
     $_.DisplayName = $_.NaamLang
@@ -85,11 +88,24 @@ $departments | ForEach-Object {
     # Add the manager
     $managerObject = $managers[$_.orgEenheidID]
     if ($null -ne $managerObject) {
-        $_.ManagerExternalId = $managerObject.persNr
+        if ($managerObject.persnr -is [system.array] ) {
+            $_.ManagerExternalId = $managerObject.persnr[0]
+            $string = [string]$managerObject.persnr
+            Write-Verbose -Verbose "[Departments] Multiple managers found for OE $($_.ExternalId): ($string). Keeping manager $($_.ManagerExternalId)."
+        } else {
+            $_.ManagerExternalId = $managerObject.persNr
+        }
+        #if ($_.ManagerExternalId -eq "13240" -or $_manager.ExternalId -eq "8893")
+        #{
+        #   Write-Verbose -Verbose "Missing person record for OE ($($_.ExternalId))"
+        #   $_.ManagerExternalId = $null
+        #}
     }
 }
 
 $json = $departments | ConvertTo-Json -Depth 3
-Write-Verbose -Verbose "Department import completed";
+Write-Verbose -Verbose "[Departments] Exporting data to HelloID"
 
 Write-Output $json
+
+Write-Verbose -Verbose "[Departments] Exported data to HelloID"
