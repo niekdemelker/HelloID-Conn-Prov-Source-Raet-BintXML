@@ -1,0 +1,33 @@
+[
+    {
+      "key": "xmlPath",
+      "type": "input",
+      "defaultValue": "",
+      "templateOptions": {
+        "label": "xmlPath",
+        "placeholder": "\\\\Network\\HelloID\\BintXML",
+        "description": "Location for the Bint XML files",
+        "required": true
+      }
+    },
+    {
+      "key": "locationCsv",
+      "type": "input",
+      "defaultValue": "",
+      "templateOptions": {
+        "label": "locationCsv",
+        "placeholder": "\\\\Network\\HelloID\\BintXML",
+        "description": "Location for the location csv",
+        "required": true
+      }
+    },
+    {
+      "key": "usePositions",
+      "type": "checkbox",
+      "defaultValue": false,
+      "templateOptions": {
+        "label": "Use positions",
+        "required": false
+      }
+    }
+  ]

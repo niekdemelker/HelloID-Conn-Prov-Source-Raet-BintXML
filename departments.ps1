@@ -61,7 +61,9 @@ function Get-RAETXMLManagers {
 Write-Verbose -Verbose "[Departments] Import started"
 
 # Init variables
-$xmlPath = "\\Network\HelloID\HRCoreExport"
+$connectionSettings = ConvertFrom-Json $configuration
+
+$xmlPath = $($connectionSettings.xmlPath)
 
 # Get the source data
 $departments = New-Object System.Collections.ArrayList
@@ -95,11 +97,6 @@ $departments | ForEach-Object {
         } else {
             $_.ManagerExternalId = $managerObject.persNr
         }
-        #if ($_.ManagerExternalId -eq "13240" -or $_manager.ExternalId -eq "8893")
-        #{
-        #   Write-Verbose -Verbose "Missing person record for OE ($($_.ExternalId))"
-        #   $_.ManagerExternalId = $null
-        #}
     }
 }
 
