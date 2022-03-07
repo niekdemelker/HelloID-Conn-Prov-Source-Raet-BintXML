@@ -81,6 +81,7 @@ $departments | Add-Member -MemberType NoteProperty -Name "Name" -Value $null -Fo
 $departments | Add-Member -MemberType NoteProperty -Name "ManagerExternalId" -Value $null -Force
 $departments | Add-Member -MemberType NoteProperty -Name "ParentExternalId" -Value $null -Force
 
+Write-Verbose -Verbose "[Departments] Exporting data to HelloID"
 $departments | ForEach-Object {
     $_.ExternalId = $_.orgEenheidID
     $_.DisplayName = $_.NaamLang
@@ -98,11 +99,10 @@ $departments | ForEach-Object {
             $_.ManagerExternalId = $managerObject.persNr
         }
     }
+
+    $json = $_ | ConvertTo-Json -Depth 3
+
+    Write-Output $json
 }
-
-$json = $departments | ConvertTo-Json -Depth 3
-Write-Verbose -Verbose "[Departments] Exporting data to HelloID"
-
-Write-Output $json
 
 Write-Verbose -Verbose "[Departments] Exported data to HelloID"
