@@ -318,6 +318,74 @@ Write-Verbose -Verbose "Exporting data to HelloID";
 
 # Output the json
 foreach ($Person in $persons) {
+    # Map DisplayName (as seen in Raw data)
+    $externalID = "$($person.externalId)".trim()
+    $firstName = "$($person.roepnaam_P01003)".trim()
+    $prefix = "$($person.voorvoegsels_P00302)".trim()
+    $lastName = "$($person.geboortenaam_P00301)".trim()
+    $partnerPrefix = "$($person.voorvoegsels_P00391)".trim()
+    $partnerLastname = "$($person.geboortenaam_P00390)".trim()
+    
+    $nameConvention = $person.k_naamgebruik.Code
+    switch($nameConvention){
+        'E' {
+            # Birthname
+            $displayName = $firstName
+
+            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
+            $displayName = $displayName + " " + $lastName
+
+            $displayName = $displayName + " " + "($externalID)"
+        }
+        'B' {
+            # Partnername - Birthname
+            $displayName = $firstName
+
+            if(-not[String]::IsNullOrEmpty($partnerPrefix)){ $displayName = $displayName + " " + $partnerPrefix }
+            $displayName = $displayName + " " + $partnerLastname
+
+            $displayName = $displayName + " -"
+
+            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
+            $displayName = $displayName + " " + $lastName
+
+            $displayName = $displayName + " " + "($externalID)"
+        }
+        'P' {
+            # Partnername
+            $displayName = $firstName
+
+            if(-not[String]::IsNullOrEmpty($partnerPrefix)){ $displayName = $displayName + " " + $partnerPrefix }
+            $displayName = $displayName + " " + $partnerLastname
+
+            $displayName = $displayName + " " + "($externalID)"         
+        }
+        'C' {
+            # Birthname - Partnername
+            $displayName = $firstName
+
+            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
+            $displayName = $displayName + " " + $lastName
+
+            $displayName = $displayName + " -"
+
+            if(-not[String]::IsNullOrEmpty($partnerPrefix)){ $displayName = $displayName + " " + $partnerPrefix }
+            $displayName = $displayName + " " + $partnerLastname                    
+
+            $displayName = $displayName + " " + "($externalID)"
+        }
+        default {
+            # Birthname
+            $displayName = $firstName
+
+            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
+            $displayName = $displayName + " " + $lastName
+
+            $displayName = $displayName + " " + "($externalID)"        
+        }
+    }
+    $person.DisplayName = $displayName;
+
     $json = $person | ConvertTo-Json -Depth 3
     Write-Output $json
 }
