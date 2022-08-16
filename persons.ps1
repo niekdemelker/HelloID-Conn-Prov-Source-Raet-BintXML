@@ -53,7 +53,6 @@ function Get-RAETXMLBAFiles {
     param(
         [parameter(Mandatory = $true)]$XMLBasePath,
         [parameter(Mandatory = $true)]$functions,
-        [parameter(Mandatory = $true)]$locations,
         [parameter(Mandatory = $true)]$departments,
         [parameter(Mandatory = $true)][ref]$persons,
         [parameter(Mandatory = $true)][ref]$contracts
@@ -77,11 +76,11 @@ function Get-RAETXMLBAFiles {
     $departments = $departments | Group-Object orgEenheidID -AsHashTable
     
     # Get location member names
-    $locationsFirstRecord = $locations.GetEnumerator() | Select-Object -first 1
-    $locationsMemberNames = ($locationsFirstRecord|Get-Member -MemberType NoteProperty).Name
+    #$locationsFirstRecord = $locations.GetEnumerator() | Select-Object -first 1
+    #$locationsMemberNames = ($locationsFirstRecord|Get-Member -MemberType NoteProperty).Name
     
     # Group locations on externalId
-    $locations = $locations | Group-Object externalId -AsHashTable
+    #$locations = $locations | Group-Object externalId -AsHashTable
 
     # List all files in the selected folder
     $files = Get-ChildItem -Path $XMLBasePath -Filter "*.xml"
@@ -144,6 +143,7 @@ function Get-RAETXMLBAFiles {
                 }
             }
 			
+            <#
 			$pattern = '[^a-zA-Z]'
             if ([string]::IsNullOrEmpty($contract.dv_aanvullendeRubriek_E2078 ) -eq $true) {
                 foreach ($name in $locationsMemberNames) {
@@ -157,6 +157,7 @@ function Get-RAETXMLBAFiles {
                      $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "aanvullendeRubriek_E2078" + "_" + ($name -replace $pattern, '')) -Value $contractLocation."$name" -Force
                 }
             }
+            #>
 
             if ([string]::IsNullOrEmpty($contract.dv_orgEenheid_P01106) -eq $true) {
                 foreach ($name in $departmentMemberNames) {
@@ -247,14 +248,14 @@ $connectionSettings = ConvertFrom-Json $configuration
 
 $xmlPath = $($connectionSettings.xmlPath)
 $usePositions = [System.Convert]::ToBoolean($connectionSettings.usePositions)
-$locationCsv = $($connectionSettings.locationCsv)
+#$locationCsv = $($connectionSettings.locationCsv)
 
 # Get the source data
 $persons = New-Object System.Collections.ArrayList
 $contracts = New-Object System.Collections.ArrayList
 $functions = New-Object System.Collections.ArrayList
 $departments = New-Object System.Collections.ArrayList
-$locations = Import-Csv -Path $locationCsv -Delimiter ";"
+#$locations = Import-Csv -Path $locationCsv -Delimiter ";"
 
 Write-Verbose -Verbose "Parsing function file...";
 Get-RAETXMLFunctions -XMLBasePath $xmlPath -FileFilter "rst_functie_*.xml" ([ref]$functions)
@@ -263,7 +264,7 @@ Write-Verbose -Verbose "Parsing department file...";
 Get-RAETXMLDepartments -XMLBasePath $xmlPath -FileFilter "rst_orgeenheid_*.xml" ([ref]$departments)
 
 Write-Verbose -Verbose "Parsing person/contracts files...";
-Get-RAETXMLBAFiles -XMLBasePath $xmlPath $functions $locations $departments ([ref]$persons) ([ref]$contracts)
+Get-RAETXMLBAFiles -XMLBasePath $xmlPath $functions $departments ([ref]$persons) ([ref]$contracts)
 
 # Group contracts on externalId
 $contracts = $contracts | Group-Object dv_persNrDV_identificatieDV -AsHashTable

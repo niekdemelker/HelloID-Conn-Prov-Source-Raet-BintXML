@@ -11,17 +11,6 @@
       }
     },
     {
-      "key": "locationCsv",
-      "type": "input",
-      "defaultValue": "",
-      "templateOptions": {
-        "label": "locationCsv",
-        "placeholder": "\\\\Network\\HelloID\\BintXML",
-        "description": "Location for the location csv",
-        "required": true
-      }
-    },
-    {
       "key": "usePositions",
       "type": "checkbox",
       "defaultValue": false,
