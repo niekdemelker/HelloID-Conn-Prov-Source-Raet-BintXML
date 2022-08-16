@@ -17,14 +17,6 @@
 			}
 		},
 		{
-			"name": "Custom.titles",
-			"mode": "field",
-			"value": "titelsVoorDeNaam_P00305",
-			"validation": {
-				"required": false
-			}
-		},
-		{
 			"name": "Details.BirthDate",
 			"mode": "field",
 			"value": "datumGeboorte_P00321",
@@ -158,22 +150,6 @@
 			"name": "CostCenter.Name",
 			"mode": "field",
 			"value": "dv_kostenPlaats_P01134_desc",
-			"validation": {
-				"required": false
-			}
-		},
-		{
-			"name": "Custom.EndDateFormatted",
-			"mode": "complex",
-			"value": "function convertDate(date) {\r\n    let day = date.getDate();\r\n    day = day < 10 ? \"0\" + day : day;\r\n    let month = date.getMonth() + 1;\r\n    month = month < 10 ? \"0\" + month : month;\r\n    let year = date.getFullYear();\r\n    return day + \"-\" + month + \"-\" + year;\r\n}\r\n\r\nlet endDate = sourceContract.dv_einddatum_P00830;\r\nif (endDate != \"\") {\r\n    const date = new Date(endDate);\r\n    newDate = convertDate(date);\r\n} else {\r\n    newDate = \"\"\r\n}",
-			"validation": {
-				"required": false
-			}
-		},
-		{
-			"name": "Custom.StartDateFormatted",
-			"mode": "complex",
-			"value": "function convertDate(date) {\r\n    let day = date.getDate();\r\n    day = day < 10 ? \"0\" + day : day;\r\n    let month = date.getMonth() + 1;\r\n    month = month < 10 ? \"0\" + month : month;\r\n    let year = date.getFullYear();\r\n    return day + \"-\" + month + \"-\" + year;\r\n}\r\n\r\nlet startDate = sourceContract.dv_begindatum_P00322;\r\nif (startDate != \"\") {\r\n    const date = new Date(startDate);\r\n    newDate = convertDate(date);\r\n} else {\r\n    newDate = \"\"\r\n}",
 			"validation": {
 				"required": false
 			}
