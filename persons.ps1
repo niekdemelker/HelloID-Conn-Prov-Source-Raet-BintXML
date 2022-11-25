@@ -98,75 +98,25 @@ Function Get-DisplayName {
 
     $nameConvention = $Person.k_naamgebruik.Code
 
-    switch ($nameConvention) {
-        'E' {
-            # Birthname
-            $displayName = $firstName
-
-            if (-not[String]::IsNullOrEmpty($prefix)) {
-                $displayName = $displayName + " " + $prefix
-            }
-
-            return $displayName + " " + $lastName + " ($externalID)"
+    $DisplayName = switch ($nameConvention) {
+        'B' { # Partnername - Birthname
+            @($firstName, $partnerPrefix, $partnerLastname, '-', $prefix, $lastName, "($externalID)")
+            break
         }
-        'B' {
-            # Partnername - Birthname
-            $displayName = $firstName
-
-            if (-not[String]::IsNullOrEmpty($partnerPrefix)) {
-                $displayName = $displayName + " " + $partnerPrefix
-            }
-            $displayName = $displayName + " " + $partnerLastname
-            $displayName = $displayName + " -"
-
-            if (-not[String]::IsNullOrEmpty($prefix)) {
-                $displayName = "$displayName $prefix"
-            }
-            $displayName = "$displayName $lastName"
-            return "$displayName ($externalID)"
+        'P' { # Partnername
+            @($firstName, $partnerPrefix, $partnerLastname, "($externalID)")
+            break
         }
-        'P' {
-            # Partnername
-            $displayName = $firstName
-
-            if (-not[String]::IsNullOrEmpty($partnerPrefix)) { $displayName = $displayName + " " + $partnerPrefix }
-            $displayName = $displayName + " " + $partnerLastname
-
-            return $displayName + " ($externalID)"
+        'C' { # Birthname - Partnername
+            @($firstName, $prefix, $lastName, '-', $partnerPrefix, $partnerLastname, "($externalID)")
+            break
         }
-        'C' {
-            # Birthname - Partnername
-            $displayName = $firstName
-
-            if (-not[String]::IsNullOrEmpty($prefix)) {
-                $displayName = $displayName + " " + $prefix
-            }
-
-            $displayName = $displayName + " " + $lastName
-
-            $displayName = $displayName + " -"
-
-            if (-not[String]::IsNullOrEmpty($partnerPrefix)) {
-                $displayName = $displayName + " " + $partnerPrefix
-            }
-
-            $displayName = $displayName + " " + $partnerLastname
-
-            return $displayName + " ($externalID)"
-        }
-        default {
-            # Birthname
-            $displayName = $firstName
-
-            if (-not[String]::IsNullOrEmpty($prefix)) {
-                $displayName = $displayName + " " + $prefix
-            }
-
-            $displayName = $displayName + " " + $lastName
-
-            return $displayName + " ($externalID)"
+        default { # Birthname
+            @($firstName, $prefix, $lastName, "($externalID)")
         }
     }
+
+    return $DisplayName -join ' ' -replace '\s+', ' ' -replace ' - ', '-'
 }
 
 Function Format-VismaPerson {
