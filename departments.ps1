@@ -1,108 +1,132 @@
 function Get-RAETXMLDepartments {
     param(
-        [parameter(Mandatory = $true)]$XMLBasePath,
-        [parameter(Mandatory = $true)]$FileFilter,
-        [parameter(Mandatory = $true)][ref]$departments
+        [parameter(Mandatory)]
+        $XMLBasePath,
+
+        [parameter(Mandatory)]
+        $FileFilter
     )
 
-    $files = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter | Sort-Object LastWriteTime -Descending
-    if ($files.Count -eq 0) { return }
+    $File = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter |
+        Sort-Object -Property 'LastWriteTime' -Descending |
+        Select-Object -First 1
+
+    if ($File.Count -eq 0) {
+        return
+    }
 
     # Read content as XML
-    [xml]$xml = Get-Content $files[0].FullName
+    [xml]$xml = Get-Content $File.FullName
 
-    # Process all records
-    foreach ($afdeling in $xml.GetElementsByTagName("orgEenheid")) {
-        $department = [PSCustomObject]@{}
+    $Elements = $xml.GetElementsByTagName("orgEenheid")
 
-        foreach ($child in $afdeling.ChildNodes) {
-            $department | Add-Member -MemberType NoteProperty -Name $child.LocalName -Value $child.'#text' -Force
+    $Elements | ForEach-Object {
+
+        $Result = [PSCustomObject]@{}
+
+        $_.ChildNodes | ForEach-Object {
+            $Result | Add-Member -NotePropertyName $_.LocalName -NotePropertyValue $_.'#text' -Force
         }
 
-        [void]$departments.value.Add($department)
+        $Result
     }
 }
 
 function Get-RAETXMLManagers {
     param(
-        [parameter(Mandatory = $true)]$XMLBasePath,
-        [parameter(Mandatory = $true)]$FileFilter,
-        [parameter(Mandatory = $true)]$ManagerRoleCodes,
-        [parameter(Mandatory = $true)][ref]$managers
+        [parameter(Mandatory)]
+        $XMLBasePath,
+
+        [parameter(Mandatory)]
+        $FileFilter,
+
+        [parameter(Mandatory)]
+        [string[]]$ManagerRoleCodes
     )
 
-    $files = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter | Sort-Object LastWriteTime -Descending
-    if ($files.Count -eq 0) { return }
+    $File = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($file.Count -eq 0) {
+        return
+    }
 
     # Read content as XML
-    [xml]$xml = Get-Content $files[0].FullName
+    [xml]$xml = Get-Content $File.FullName
+
+    $Elements = $xml.GetElementsByTagName("roltoewijzing") | Where-Object {
+        $_.oeRolCode -in $ManagerRoleCodes -and
+        [DateTime]::ParseExact($_.begindatum, "yyyy-MM-dd", $null) -le [DateTime]::Today -and
+        (
+            [String]::IsNullOrEmpty($_.einddatum) -or
+            [DateTime]::ParseExact($_.einddatum, "yyyy-MM-dd", $null) -ge [DateTime]::Today
+        )
+    }
 
     # Process all records
-    foreach ($roltoewijzing in $xml.GetElementsByTagName("roltoewijzing")) {
-        $manager = [PSCustomObject]@{}
+    $Elements | ForEach-Object {
 
-        foreach ($child in $roltoewijzing.ChildNodes) {
-            $manager | Add-Member -MemberType NoteProperty -Name $child.LocalName -Value $child.'#text' -Force
+        $Result = [PSCustomObject]@{}
+
+        $_.ChildNodes | ForEach-Object {
+            $Result | Add-Member -NotePropertyName $_.LocalName -NotePropertyValue $_.'#text' -Force
         }
 
-        # Make sure the manager meets the criteria
-        if ($manager.oeRolCode -notin $ManagerRoleCodes) { continue }
-
-        if ([DateTime]::ParseExact($manager.begindatum, "yyyy-MM-dd", $null) -ge (Get-Date)) { continue }
-
-        if ([string]::IsNullOrEmpty($manager.einddatum) -eq $false) {
-            if ([DateTime]::ParseExact($manager.einddatum, "yyyy-MM-dd", $null) -le (Get-Date)) { continue }
-        }
-
-        [void]$managers.value.Add($manager)
+        $Result
     }
 }
 
-Write-Verbose -Verbose "[Departments] Import started"
+Write-Verbose -Verbose "Import started"
 
 # Init variables
 $connectionSettings = ConvertFrom-Json $configuration
 
-$xmlPath = $($connectionSettings.xmlPath)
+$XmlPath = $($connectionSettings.xmlPath)
+
+$FileTime = (Get-ChildItem -File (Join-Path $xmlPath -ChildPath "IAM_BA_*.xml") | Sort-Object -Descending -Property CreationTime | Select-Object -First 1).name.split('_')[2]
+
+Write-Verbose -Verbose "FileTime: $FileTime"
 
 # Get the source data
-$departments = New-Object System.Collections.ArrayList
-$managers = New-Object System.Collections.ArrayList
-Get-RAETXMLDepartments -XMLBasePath $xmlPath -FileFilter "rst_orgeenheid_*.xml" ([ref]$departments)
-Get-RAETXMLManagers -XMLBasePath $xmlPath -FileFilter "roltoewijzing_*.xml" -ManagerRoleCodes @("MGR") ([ref]$managers)
+$Departments = Get-RAETXMLDepartments -XMLBasePath $XmlPath -FileFilter "rst_orgeenheid_$($FileTime)_*.xml"
+$managers = Get-RAETXMLManagers -XMLBasePath $XmlPath -FileFilter "roltoewijzing_*_$($FileTime)_*.xml" -ManagerRoleCodes "MGR"
 
 # Group managers per OE
 $managers = $managers | Group-Object orgEenheidID -AsHashTable
 
 # Extend the departments with required and additional fields
-$departments | Add-Member -MemberType NoteProperty -Name "ExternalId" -Value $null -Force
-$departments | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $null -Force
-$departments | Add-Member -MemberType NoteProperty -Name "Name" -Value $null -Force
-$departments | Add-Member -MemberType NoteProperty -Name "ManagerExternalId" -Value $null -Force
-$departments | Add-Member -MemberType NoteProperty -Name "ParentExternalId" -Value $null -Force
+$Departments | Add-Member -MemberType AliasProperty -Name "ExternalId" -Value orgEenheidID
+$Departments | Add-Member -MemberType AliasProperty -Name "DisplayName" -Value NaamLang
+$Departments | Add-Member -MemberType AliasProperty -Name "Name" -Value NaamLang
+$Departments | Add-Member -MemberType AliasProperty -Name "ParentExternalId" -Value hogereOrgEenheid
 
-Write-Verbose -Verbose "[Departments] Exporting data to HelloID"
-$departments | ForEach-Object {
-    $_.ExternalId = $_.orgEenheidID
-    $_.DisplayName = $_.NaamLang
-    $_.Name = $_.NaamLang
-    $_.ParentExternalId = $_.hogereOrgEenheid
-
-    # Add the manager
-    $managerObject = $managers[$_.orgEenheidID]
-    if ($null -ne $managerObject) {
-        if ($managerObject.persnr -is [system.array] ) {
-            $_.ManagerExternalId = $managerObject.persnr[0]
-            $string = [string]$managerObject.persnr
-            Write-Verbose -Verbose "[Departments] Multiple managers found for OE $($_.ExternalId): ($string). Keeping manager $($_.ManagerExternalId)."
-        } else {
-            $_.ManagerExternalId = $managerObject.persNr
-        }
-    }
-
-    $json = $_ | ConvertTo-Json -Depth 3
-
-    Write-Output $json
+$departments | Add-Member -NotePropertyMembers @{
+    ManagerExternalId = $null
 }
 
-Write-Verbose -Verbose "[Departments] Exported data to HelloID"
+Write-Verbose -Verbose "Exporting data to HelloID"
+$Departments | ForEach-Object {
+
+    # Add the manager
+    $manager = $managers[$_.orgEenheidID]
+
+    if ($manager.Count -eq 1) {
+        $_.ManagerExternalId = $manager.persNr
+    }
+    elseif ($manager.Count -gt 1) {
+        $_.ManagerExternalId = (
+            $manager <# | Sort-Object begindatum -Descending #> | Select-Object -First 1
+        ).persnr
+
+        #Write-Verbose -Verbose "[Departments] Multiple managers found for OE $($_.ExternalId): ($([string]$manager.persnr)). Keeping manager $($_.ManagerExternalId)."
+    }
+}
+
+Write-Output (
+    $Departments | Select-Object -Property @(
+        "ExternalId", "DisplayName", "Name", "ParentExternalId", "ManagerExternalId"
+    ) | ConvertTo-Json -Depth 5 -Compress
+)
+
+Write-Verbose -Verbose "Exported data to HelloID"

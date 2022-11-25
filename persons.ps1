@@ -1,243 +1,341 @@
 # Get the source data
 function Get-RAETXMLFunctions {
     param(
-        [parameter(Mandatory = $true)]$XMLBasePath,
-        [parameter(Mandatory = $true)]$FileFilter,
-        [parameter(Mandatory = $true)][ref]$functions
+        [parameter(Mandatory)]
+        $XMLBasePath,
+
+        [parameter(Mandatory)]
+        $FileFilter
     )
 
-    $files = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter | Sort-Object LastWriteTime -Descending
-    if ($files.Count -eq 0) { return }
+    $File = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter |
+        Sort-Object -Property 'LastWriteTime' -Descending |
+        Select-Object -First 1
+
+    if ($File.Count -eq 0) {
+        return
+    }
 
     # Read content as XML
-    [xml]$xml = Get-Content $files[0].FullName
+    [xml]$xml = Get-Content $File.FullName
 
-    # Process all records
-    foreach ($functie in $xml.GetElementsByTagName("functie")) {
-        $function = [PSCustomObject]@{}
+    $Elements = $xml.GetElementsByTagName("orgEenheid")
 
-        foreach ($child in $functie.ChildNodes) {
-            $function | Add-Member -MemberType NoteProperty -Name $child.LocalName -Value $child.'#text' -Force
+    $Elements | ForEach-Object {
+
+        $Result = [PSCustomObject]@{}
+
+        $_.ChildNodes | ForEach-Object {
+            $Result | Add-Member -NotePropertyName $_.LocalName -NotePropertyValue $_.'#text' -Force
         }
 
-        [void]$functions.value.Add($function)
+        $Result
     }
 }
 
 function Get-RAETXMLDepartments {
     param(
-        [parameter(Mandatory = $true)]$XMLBasePath,
-        [parameter(Mandatory = $true)]$FileFilter,
-        [parameter(Mandatory = $true)][ref]$departments
+        [parameter(Mandatory)]
+        $XMLBasePath,
+
+        [parameter(Mandatory)]
+        $FileFilter
     )
 
-    $files = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter | Sort-Object LastWriteTime -Descending
-    if ($files.Count -eq 0) { return }
+    $File = Get-ChildItem -Path $XMLBasePath -Filter $FileFilter |
+        Sort-Object -Property 'LastWriteTime' -Descending |
+        Select-Object -First 1
+
+    if ($File.Count -eq 0) {
+        return
+    }
 
     # Read content as XML
-    [xml]$xml = Get-Content $files[0].FullName
+    [xml]$xml = Get-Content $File.FullName
 
-    # Process all records
-    foreach ($afdeling in $xml.GetElementsByTagName("orgEenheid")) {
-        $department = [PSCustomObject]@{}
+    $Elements = $xml.GetElementsByTagName("orgEenheid")
 
-        foreach ($child in $afdeling.ChildNodes) {
-            $department | Add-Member -MemberType NoteProperty -Name $child.LocalName -Value $child.'#text' -Force
+    $Elements | ForEach-Object {
+
+        $Result = [PSCustomObject]@{}
+
+        $_.ChildNodes | ForEach-Object {
+            $Result | Add-Member -NotePropertyName $_.LocalName -NotePropertyValue $_.'#text' -Force
         }
 
-        [void]$departments.value.Add($department)
+        $Result
     }
 }
 
-function Get-RAETXMLBAFiles {
+Function Get-RAETXMLBAFiles {
     param(
-        [parameter(Mandatory = $true)]$XMLBasePath,
-        [parameter(Mandatory = $true)]$functions,
-        [parameter(Mandatory = $true)]$departments,
-        [parameter(Mandatory = $true)][ref]$persons,
-        [parameter(Mandatory = $true)][ref]$contracts
+        [parameter(Mandatory)]
+        $XMLBasePath,
+
+        [parameter(Mandatory)]
+        $FileFilter
     )
-    
-    # set date
-    $now = New-Object "System.DateTime" -ArgumentList (Get-Date).Year, (Get-Date).Month, (Get-Date).Day
-
-    # Get function member names
-    $functionsFirstRecord = $functions.GetEnumerator() | Select-Object -first 1
-    $functionMemberNames = ($functionsFirstRecord|Get-Member -MemberType NoteProperty).Name
-
-    # Group functions on externalId
-    $functions = $functions | Group-Object functieCode -AsHashTable
-
-    # Get department member names
-    $departmentsFirstRecord = $departments.GetEnumerator() | Select-Object -first 1
-    $departmentMemberNames = ($departmentsFirstRecord|Get-Member -MemberType NoteProperty).Name
-
-    # Group departments on externalId
-    $departments = $departments | Group-Object orgEenheidID -AsHashTable
-    
-    # Get location member names
-    #$locationsFirstRecord = $locations.GetEnumerator() | Select-Object -first 1
-    #$locationsMemberNames = ($locationsFirstRecord|Get-Member -MemberType NoteProperty).Name
-    
-    # Group locations on externalId
-    #$locations = $locations | Group-Object externalId -AsHashTable
 
     # List all files in the selected folder
-    $files = Get-ChildItem -Path $XMLBasePath -Filter "*.xml"
+    Get-ChildItem -Path $XMLBasePath -Filter $FileFilter
+}
 
-    # Process all files
-    $count = 1
-    foreach ($file in $files) {
-        [xml]$xml = Get-Content $file.FullName
+Function Get-DisplayName {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [PScustomObject]
+        $Person
+    )
 
-        foreach ($werknemer in $xml.GetElementsByTagName("persoon")) {
-            $person = [PSCustomObject]@{}
+    # Map DisplayName (as seen in Raw data)
+    $externalID = "$($Person.persNr_identificatiePS)".trim()
+    $firstName = "$($Person.roepnaam_P01003)".trim()
+    $prefix = "$($Person.voorvoegsels_P00302)".trim()
+    $lastName = "$($Person.geboortenaam_P00301)".trim()
+    $partnerPrefix = "$($Person.voorvoegsels_P00391)".trim()
+    $partnerLastname = "$($Person.geboortenaam_P00390)".trim()
 
-            foreach ($id in $werknemer.GetElementsByTagName("identificatiePS").ChildNodes) {
-                $person | Add-Member -MemberType NoteProperty -Name ($id.LocalName + "_identificatiePS") -Value $id.'#text' -Force
+    $nameConvention = $Person.k_naamgebruik.Code
+
+    switch ($nameConvention) {
+        'E' {
+            # Birthname
+            $displayName = $firstName
+
+            if (-not[String]::IsNullOrEmpty($prefix)) {
+                $displayName = $displayName + " " + $prefix
             }
 
-            foreach ($rubriekcode in $werknemer.GetElementsByTagName("rubriekcode")) {
-                $person | Add-Member -MemberType NoteProperty -Name ($rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText) -Value $rubriekcode.ParentNode.waarde -Force
-            }
-
-            [void]$persons.value.Add($person)
+            return $displayName + " " + $lastName + " ($externalID)"
         }
+        'B' {
+            # Partnername - Birthname
+            $displayName = $firstName
 
-        foreach ($dienstverband in $xml.GetElementsByTagName("dienstverband")) {
-            
-            $contract = [PSCustomObject]@{}
-			
-            foreach ($id in $dienstverband.GetElementsByTagName("identificatieDV").ChildNodes) {
-                $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + $id.LocalName + "_identificatieDV") -Value $id.'#text' -Force
+            if (-not[String]::IsNullOrEmpty($partnerPrefix)) {
+                $displayName = $displayName + " " + $partnerPrefix
             }
-   
-            foreach ($node in $dienstverband | Get-Member -MemberType Property) {
-           
-                if ($node.name -NE 'inroostering' -And $node.name -NE 'loonVerdeling') {
+            $displayName = $displayName + " " + $partnerLastname
+            $displayName = $displayName + " -"
 
-                    foreach ($rubriekcode in $dienstverband.($node.Name).GetElementsByTagName("rubriekcode")) {
-                    
-                        $waarde = $rubriekcode.ParentNode.waarde
-                           
-                        $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText) -Value $waarde -Force
-
-                        # Add the value description as a separate property
-                        if ([string]::IsNullOrEmpty($rubriekcode.ParentNode.omschrijvingWaarde) -eq $false) {
-                            $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText + "_desc") -Value $rubriekcode.ParentNode.omschrijvingWaarde -Force
-                        }
-                    }
-                }
+            if (-not[String]::IsNullOrEmpty($prefix)) {
+                $displayName = "$displayName $prefix"
             }
-             
-            if ([string]::IsNullOrEmpty($contract.dv_functiePrimair_P01107) -eq $true) {
-                foreach ($name in $functionMemberNames) {
-                    $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "functiePrimair_P01107" + "_" + $name) -Value "" -Force
-                }
-            }
-            else
-            {
-                $contractFunction = $functions[$contract.dv_functiePrimair_P01107]
-                foreach ($name in $functionMemberNames) {
-                     $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "functiePrimair_P01107" + "_" + $name) -Value $contractFunction."$name" -Force
-                }
-            }
-			
-            <#
-			$pattern = '[^a-zA-Z]'
-            if ([string]::IsNullOrEmpty($contract.dv_aanvullendeRubriek_E2078 ) -eq $true) {
-                foreach ($name in $locationsMemberNames) {
-                    $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "aanvullendeRubriek_E2078" + "_" + ($name -replace $pattern, '')) -Value "" -Force
-                }
-            }
-            else
-            {
-                $contractLocation = $locations[$contract.dv_aanvullendeRubriek_E2078 ]
-                foreach ($name in $locationsMemberNames) {
-                     $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "aanvullendeRubriek_E2078" + "_" + ($name -replace $pattern, '')) -Value $contractLocation."$name" -Force
-                }
-            }
-            #>
-
-            if ([string]::IsNullOrEmpty($contract.dv_orgEenheid_P01106) -eq $true) {
-                foreach ($name in $departmentMemberNames) {
-                    $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "dv_orgEenheid_P01106" + "_" + $name) -Value "" -Force
-                }
-            }
-            else
-            {
-                $contractDepartment = $departments[$contract.dv_orgEenheid_P01106 ]
-                foreach ($name in $departmentMemberNames) {
-                     $contract | Add-Member -MemberType NoteProperty -Name ("dv_" + "dv_orgEenheid_P01106" + "_" + $name) -Value $contractDepartment."$name" -Force
-                }
-            }
-
-			if($usePositions)
-			{
-				# make a contract per inzet
-				foreach ($inzet in $dienstverband.GetElementsByTagName("inzet")) {
-					
-					#clone contract object
-					$position = [PSCustomObject]@{}
-					foreach ($propery in $contract.psobject.properties) {
-						$position | Add-Member -MemberType $propery.MemberType -Name $propery.Name -Value $propery.Value
-					}
-
-					foreach ($id in $inzet.GetElementsByTagName("identificatieIZ").ChildNodes) {
-						$position | Add-Member -MemberType NoteProperty -Name ("iz_" + $id.LocalName + "_identificatieIZ") -Value $id.'#text' -Force
-					}
-					
-					# this should be done before the inzet loop & should exclude all nodes in 'inroostering'
-					foreach ($rubriekcode in $inzet.GetElementsByTagName("rubriekcode")) {
-						$waarde = $rubriekcode.ParentNode.waarde
-
-						$position | Add-Member -MemberType NoteProperty -Name ("iz_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText) -Value $waarde -Force
-
-						# Add the value description as a separate property
-						if ([string]::IsNullOrEmpty($rubriekcode.ParentNode.omschrijvingWaarde) -eq $false) {
-							$position | Add-Member -MemberType NoteProperty -Name ("iz_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText + "_desc") -Value $rubriekcode.ParentNode.omschrijvingWaarde -Force
-						}
-					}
-				
-					if ([string]::IsNullOrEmpty($position.iz_operationeleFunctie_P01122) -eq $true) {
-						foreach ($name in $FunctionMemberNames) {
-							$contract | Add-Member -MemberType NoteProperty -Name ("iz_" + "operationeleFunctie_P01122" + "_" + $name) -Value "" -Force
-						}
-					}
-					else
-					{
-						$contractFunction = $functions[$position.iz_operationeleFunctie_P01122]
-						foreach ($name in $FunctionMemberNames) {
-							$position | Add-Member -MemberType NoteProperty -Name ("iz_" + "operationeleFunctie_P01122" + "_" + $name) -Value $contractFunction."$name" -Force
-						}
-					}
-
-					if ([string]::IsNullOrEmpty($position.iz_operationeleOrgEenheid_P01121 ) -eq $true) {
-						foreach ($name in $DepartmentMemberNames) {
-							$contract | Add-Member -MemberType NoteProperty -Name ("iz_" + "operationeleOrgEenheid_P01121" + "_" + $name) -Value "" -Force
-						}
-					}
-					else
-					{
-						$contractDepartment = $departments[$position.iz_operationeleOrgEenheid_P01121 ]
-						foreach ($name in $DepartmentMemberNames) {
-							$position | Add-Member -MemberType NoteProperty -Name ("iz_" + "operationeleOrgEenheid_P01121" + "_" + $name) -Value $contractDepartment."$name" -Force
-						}
-					}
-		  
-					$positionActive = (([DateTime]$position.iz_begindatum_P01125).addDays(0) -le $now -and ([string]::IsNullOrEmpty($position.iz_einddatum_P01126) -or ([DateTime]$position.iz_einddatum_P01126).addDays(0) -gt $now))
-					$position | Add-Member -MemberType NoteProperty -Name ("iz_" + "is_active") -Value $positionActive -Force
-	  
-					[void]$contracts.value.Add($position)
-				}
-			}
-			else
-			{
-				[void]$contracts.value.Add($contract)
-			}
-
+            $displayName = "$displayName $lastName"
+            return "$displayName ($externalID)"
         }
-        $count += 1
+        'P' {
+            # Partnername
+            $displayName = $firstName
+
+            if (-not[String]::IsNullOrEmpty($partnerPrefix)) { $displayName = $displayName + " " + $partnerPrefix }
+            $displayName = $displayName + " " + $partnerLastname
+
+            return $displayName + " ($externalID)"
+        }
+        'C' {
+            # Birthname - Partnername
+            $displayName = $firstName
+
+            if (-not[String]::IsNullOrEmpty($prefix)) {
+                $displayName = $displayName + " " + $prefix
+            }
+
+            $displayName = $displayName + " " + $lastName
+
+            $displayName = $displayName + " -"
+
+            if (-not[String]::IsNullOrEmpty($partnerPrefix)) {
+                $displayName = $displayName + " " + $partnerPrefix
+            }
+
+            $displayName = $displayName + " " + $partnerLastname
+
+            return $displayName + " ($externalID)"
+        }
+        default {
+            # Birthname
+            $displayName = $firstName
+
+            if (-not[String]::IsNullOrEmpty($prefix)) {
+                $displayName = $displayName + " " + $prefix
+            }
+
+            $displayName = $displayName + " " + $lastName
+
+            return $displayName + " ($externalID)"
+        }
+    }
+}
+
+Function Format-VismaPerson {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        $XmlPerson
+    )
+
+    $person = [PSCustomObject]@{}
+
+    $XmlPerson.GetElementsByTagName("identificatiePS").ChildNodes | ForEach-Object {
+        $person | Add-Member -NotePropertyName "$($_.LocalName)_identificatiePS" -NotePropertyValue $_.'#text' -Force
+    }
+
+    $XmlPerson.GetElementsByTagName("rubriekcode") | ForEach-Object {
+        $person | Add-Member -NotePropertyName "$($_.ParentNode.LocalName)_$($_.InnerText)" -NotePropertyValue $_.ParentNode.waarde -Force
+    }
+
+    $person
+}
+
+Function Format-VismaContract {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        $XmlContract,
+
+        [Parameter()]
+        $Functions,
+
+        [Parameter()]
+        $Departments,
+
+        [Parameter()]
+        $FunctionMemberNames,
+
+        [Parameter()]
+        $DepartmentMemberNames,
+
+        [parameter()]
+        [bool]
+        $usePositions = $false
+    )
+
+    $contract = [PSCustomObject]@{}
+
+    foreach ($id in $XmlContract.GetElementsByTagName("identificatieDV").ChildNodes) {
+        $contract | Add-Member -NotePropertyName ("dv_" + $id.LocalName + "_identificatieDV") -NotePropertyValue $id.'#text' -Force
+    }
+
+    foreach ($node in $XmlContract | Get-Member -MemberType Property) {
+
+        if ($node.name -NE 'inroostering' -And $node.name -NE 'loonVerdeling') {
+
+            foreach ($rubriekcode in $XmlContract.($node.Name).GetElementsByTagName("rubriekcode")) {
+
+                $waarde = $rubriekcode.ParentNode.waarde
+
+                $contract | Add-Member -NotePropertyName ("dv_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText) -NotePropertyValue $waarde -Force
+
+                # Add the value description as a separate property
+                if ([string]::IsNullOrEmpty($rubriekcode.ParentNode.omschrijvingWaarde) -eq $false) {
+                    $contract | Add-Member -NotePropertyName ("dv_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText + "_desc") -NotePropertyValue $rubriekcode.ParentNode.omschrijvingWaarde -Force
+                }
+            }
+        }
+    }
+
+    if ([string]::IsNullOrEmpty($contract.dv_functiePrimair_P01107) -eq $true) {
+        foreach ($name in $functionMemberNames) {
+            $contract | Add-Member -NotePropertyName ("dv_functiePrimair_P01107_" + $name) -NotePropertyValue "" -Force
+        }
+    }
+    else {
+        $contractFunction = $functions[$contract.dv_functiePrimair_P01107]
+        foreach ($name in $functionMemberNames) {
+            $contract | Add-Member -NotePropertyName ("dv_functiePrimair_P01107_" + $name) -NotePropertyValue $contractFunction."$name" -Force
+        }
+    }
+
+    <#
+	$pattern = '[^a-zA-Z]'
+    if ([string]::IsNullOrEmpty($contract.dv_aanvullendeRubriek_E2078 ) -eq $true) {
+        foreach ($name in $locationsMemberNames) {
+            $contract | Add-Member -NotePropertyName ("dv_aanvullendeRubriek_E2078_" + ($name -replace $pattern, '')) -NotePropertyValue "" -Force
+        }
+    }
+    else
+    {
+        $contractLocation = $locations[$contract.dv_aanvullendeRubriek_E2078 ]
+        foreach ($name in $locationsMemberNames) {
+                $contract | Add-Member -NotePropertyName ("dv_aanvullendeRubriek_E2078_" + ($name -replace $pattern, '')) -NotePropertyValue $contractLocation."$name" -Force
+        }
+    }
+    #>
+
+    if ([string]::IsNullOrEmpty($contract.dv_orgEenheid_P01106) -eq $true) {
+        foreach ($name in $departmentMemberNames) {
+            $contract | Add-Member -NotePropertyName ("dv_dv_orgEenheid_P01106_" + $name) -NotePropertyValue "" -Force
+        }
+    }
+    else {
+        $contractDepartment = $departments[$contract.dv_orgEenheid_P01106]
+        foreach ($name in $departmentMemberNames) {
+            $contract | Add-Member -NotePropertyName ("dv_dv_orgEenheid_P01106_" + $name) -NotePropertyValue $contractDepartment."$name" -Force
+        }
+    }
+
+    if ($usePositions) {
+        # make a contract per inzet
+        $inzetRegels = $XmlContract.GetElementsByTagName("inzet")
+
+        foreach ($inzet in $inzetRegels) {
+
+            #clone contract object
+            $position = [PSCustomObject]@{}
+            foreach ($propery in $contract.psobject.properties) {
+                $position | Add-Member -MemberType $propery.MemberType -Name $propery.Name -Value $propery.Value
+            }
+
+            foreach ($id in $inzet.GetElementsByTagName("identificatieIZ").ChildNodes) {
+                $position | Add-Member -NotePropertyName ("iz_" + $id.LocalName + "_identificatieIZ") -NotePropertyValue $id.'#text' -Force
+            }
+
+            # this should be done before the inzet loop & should exclude all nodes in 'inroostering'
+            foreach ($rubriekcode in $inzet.GetElementsByTagName("rubriekcode")) {
+                $waarde = $rubriekcode.ParentNode.waarde
+
+                $position | Add-Member -NotePropertyName ("iz_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText) -NotePropertyValue $waarde -Force
+
+                # Add the value description as a separate property
+                if ([string]::IsNullOrEmpty($rubriekcode.ParentNode.omschrijvingWaarde) -eq $false) {
+                    $position | Add-Member -NotePropertyName ("iz_" + $rubriekcode.ParentNode.LocalName + "_" + $rubriekcode.InnerText + "_desc") -NotePropertyValue $rubriekcode.ParentNode.omschrijvingWaarde -Force
+                }
+            }
+
+            if ([string]::IsNullOrEmpty($position.iz_operationeleFunctie_P01122) -eq $true) {
+                foreach ($name in $FunctionMemberNames) {
+                    $contract | Add-Member -NotePropertyName ("iz_operationeleFunctie_P01122_" + $name) -NotePropertyValue "" -Force
+                }
+            }
+            else {
+                $contractFunction = $functions[$position.iz_operationeleFunctie_P01122]
+                foreach ($name in $FunctionMemberNames) {
+                    $position | Add-Member -NotePropertyName ("iz_operationeleFunctie_P01122_" + $name) -NotePropertyValue $contractFunction."$name" -Force
+                }
+            }
+
+            if ([string]::IsNullOrEmpty($position.iz_operationeleOrgEenheid_P01121 ) -eq $true) {
+                foreach ($name in $DepartmentMemberNames) {
+                    $contract | Add-Member -NotePropertyName ("iz_operationeleOrgEenheid_P01121_" + $name) -NotePropertyValue "" -Force
+                }
+            }
+            else {
+                $contractDepartment = $departments[$position.iz_operationeleOrgEenheid_P01121 ]
+                foreach ($name in $DepartmentMemberNames) {
+                    $position | Add-Member -NotePropertyName ("iz_operationeleOrgEenheid_P01121_" + $name) -NotePropertyValue $contractDepartment."$name" -Force
+                }
+            }
+
+            $positionActive = (([DateTime]$position.iz_begindatum_P01125).addDays(0) -le $now -and ([string]::IsNullOrEmpty($position.iz_einddatum_P01126) -or ([DateTime]$position.iz_einddatum_P01126).addDays(0) -gt $now))
+            $position | Add-Member -NotePropertyName ("iz_is_active") -NotePropertyValue $positionActive -Force
+
+            $position
+        }
+    }
+    else {
+        $contract
     }
 }
 
@@ -248,147 +346,103 @@ $connectionSettings = ConvertFrom-Json $configuration
 
 $xmlPath = $($connectionSettings.xmlPath)
 $usePositions = [System.Convert]::ToBoolean($connectionSettings.usePositions)
-#$locationCsv = $($connectionSettings.locationCsv)
 
-# Get the source data
-$persons = New-Object System.Collections.ArrayList
-$contracts = New-Object System.Collections.ArrayList
-$functions = New-Object System.Collections.ArrayList
-$departments = New-Object System.Collections.ArrayList
-#$locations = Import-Csv -Path $locationCsv -Delimiter ";"
+$FileTime = (Get-ChildItem -File (Join-Path $xmlPath -ChildPath "IAM_BA_*.xml") | Sort-Object -Descending -Property CreationTime | Select-Object -First 1).name.split('_')[2]
 
 Write-Verbose -Verbose "Parsing function file...";
-Get-RAETXMLFunctions -XMLBasePath $xmlPath -FileFilter "rst_functie_*.xml" ([ref]$functions)
+$functions = Get-RAETXMLFunctions -XMLBasePath $xmlPath -FileFilter "rst_functie_$($FileTime)_*.xml"
 
 Write-Verbose -Verbose "Parsing department file...";
-Get-RAETXMLDepartments -XMLBasePath $xmlPath -FileFilter "rst_orgeenheid_*.xml" ([ref]$departments)
+$departments = Get-RAETXMLDepartments -XMLBasePath $xmlPath -FileFilter "rst_orgeenheid_$($FileTime)_*.xml"
 
-Write-Verbose -Verbose "Parsing person/contracts files...";
-Get-RAETXMLBAFiles -XMLBasePath $xmlPath $functions $departments ([ref]$persons) ([ref]$contracts)
+Write-Verbose -Verbose "Parsing BA files...";
+$files = Get-RAETXMLBAFiles -XMLBasePath $xmlPath -FileFilter "IAM_BA_$($FileTime)_*.xml"
 
-# Group contracts on externalId
-$contracts = $contracts | Group-Object dv_persNrDV_identificatieDV -AsHashTable
-
-# Augment the persons
-Write-Verbose -Verbose "Augmenting persons...";
-$persons | Add-Member -MemberType NoteProperty -Name "Contracts" -Value $null -Force
-$persons | Add-Member -MemberType NoteProperty -Name "ExternalId" -Value $null -Force
-$persons | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $null -Force
-if($usePositions)
-{
-	$persons | Add-Member -MemberType NoteProperty -Name "AllActiveFunctions" -Value $null -Force
-	$persons | Add-Member -MemberType NoteProperty -Name "AllActiveDepartments" -Value $null -Force
-}
-$persons | ForEach-Object {
-    # Map required fields
-    $_.ExternalId = $_.persNr_identificatiePS
-    $_.DisplayName = $_.persNr_identificatiePS
-
-    # Add the contracts
-    $personContracts = $contracts[$_.persNr_identificatiePS]
-    if ($null -ne $personContracts) {
-        $_.Contracts = $personContracts
-    }
-	
-	if($usePositions)
-	{
-		# add all active functions and departments to a new person attribute
-		$activePersonContracts = $personContracts | Where-Object {$_.iz_is_active -eq $True}
-		foreach ($activePersonContract in $activePersonContracts) {
-			if (![string]::IsNullOrEmpty($_.AllActiveFunctions))
-			{
-				$_.AllActiveFunctions = $_.AllActiveFunctions + " -- "    
-			}
-			$_.AllActiveFunctions = $_.AllActiveFunctions + $activePersonContract.iz_operationeleFunctie_P01122_desc 
-			
-			if (![string]::IsNullOrEmpty($_.AllActiveDepartments))
-			{
-				$_.AllActiveDepartments = $_.AllActiveDepartments + " -- "    
-			}
-			$_.AllActiveDepartments = $_.AllActiveDepartments + $activePersonContract.iz_operationeleOrgEenheid_P01121_naamLang 
-		}
-		if (![string]::IsNullOrEmpty($_.AllActiveFunctions)) { $_.AllActiveFunctions = $_.AllActiveFunctions | Select-Object -Unique }
-		if (![string]::IsNullOrEmpty($_.AllActiveDepartments)) { $_.AllActiveDepartments = $_.AllActiveDepartments | Select-Object -Unique }
-	}
+$VismaContract = @{
+    Functions             = $functions | Group-Object functieCode -AsHashTable
+    Departments           = $departments | Group-Object orgEenheidID -AsHashTable
+    FunctionMemberNames   = ($functions.GetEnumerator() | Select-Object -First 1 | Get-Member -MemberType NoteProperty).Name
+    DepartmentMemberNames = ($departments.GetEnumerator() | Select-Object -First 1 | Get-Member -MemberType NoteProperty).Name
 }
 
-# Make sure persons are unique
-$persons = $persons | Sort-Object ExternalId -Unique
-Write-Verbose -Verbose "Person import completed";
-Write-Verbose -Verbose "Exporting data to HelloID";
+$ExternalIDs = [System.Collections.ArrayList]::new()
 
-# Output the json
-foreach ($Person in $persons) {
-    # Map DisplayName (as seen in Raw data)
-    $externalID = "$($person.externalId)".trim()
-    $firstName = "$($person.roepnaam_P01003)".trim()
-    $prefix = "$($person.voorvoegsels_P00302)".trim()
-    $lastName = "$($person.geboortenaam_P00301)".trim()
-    $partnerPrefix = "$($person.voorvoegsels_P00391)".trim()
-    $partnerLastname = "$($person.geboortenaam_P00390)".trim()
-    
-    $nameConvention = $person.k_naamgebruik.Code
-    switch($nameConvention){
-        'E' {
-            # Birthname
-            $displayName = $firstName
+$Persons = [Collections.Generic.List[PSCustomObject]]::new()
 
-            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
-            $displayName = $displayName + " " + $lastName
+foreach ($file in $files) {
+    # Write-verbose -verbose "processing: $($file.FullName)"
 
-            $displayName = $displayName + " " + "($externalID)"
-        }
-        'B' {
-            # Partnername - Birthname
-            $displayName = $firstName
+    try {
+        [xml]$xml = Get-Content $file.FullName
 
-            if(-not[String]::IsNullOrEmpty($partnerPrefix)){ $displayName = $displayName + " " + $partnerPrefix }
-            $displayName = $displayName + " " + $partnerLastname
+        $employees = $xml.GetElementsByTagName("werknemer")
 
-            $displayName = $displayName + " -"
+        foreach ($employee in $employees) {
 
-            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
-            $displayName = $displayName + " " + $lastName
+            if (-Not $employee.HasChildNodes) {
+                Write-Verbose -Verbose "Found empty Employee object"
+                continue
+            }
 
-            $displayName = $displayName + " " + "($externalID)"
-        }
-        'P' {
-            # Partnername
-            $displayName = $firstName
+            $person = Format-VismaPerson -XmlPerson $employee.getElementsByTagName("persoon")
 
-            if(-not[String]::IsNullOrEmpty($partnerPrefix)){ $displayName = $displayName + " " + $partnerPrefix }
-            $displayName = $displayName + " " + $partnerLastname
+            $XmlContracts = $employee.GetElementsByTagName("dienstverband")
 
-            $displayName = $displayName + " " + "($externalID)"         
-        }
-        'C' {
-            # Birthname - Partnername
-            $displayName = $firstName
+            [array]$Contracts = $XmlContracts | ForEach-Object {
+                Format-VismaContract @VismaContract -XmlContract $_
+            }
 
-            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
-            $displayName = $displayName + " " + $lastName
+            # controle of er active contracten zijn, tot 180 dagen na uitdienst
+            if (-Not ($Contracts | Where-Object {
+                        [string]::IsNullOrWhiteSpace($_.dv_einddatum_P00830) -or
+                        [datetime]$_.dv_einddatum_P00830 -ge [datetime]::Today.AddDays(-180)
+                    })) {
+                continue
+            }
 
-            $displayName = $displayName + " -"
+            if ($ExternalIDs.Contains("$($person.persNr_identificatiePS)")) {
+                Write-Verbose -Verbose "Extern nummer met ID '$($person.persNr_identificatiePS)' is dubbel in de export ($(Get-DisplayName -Person $person))"
 
-            if(-not[String]::IsNullOrEmpty($partnerPrefix)){ $displayName = $displayName + " " + $partnerPrefix }
-            $displayName = $displayName + " " + $partnerLastname                    
+                continue
+            }
 
-            $displayName = $displayName + " " + "($externalID)"
-        }
-        default {
-            # Birthname
-            $displayName = $firstName
+            [void]$ExternalIDs.Add("$($person.persNr_identificatiePS)")
 
-            if(-not[String]::IsNullOrEmpty($prefix)){ $displayName = $displayName + " " + $prefix }
-            $displayName = $displayName + " " + $lastName
+            $person | Add-Member -NotePropertyMembers @{
+                ExternalId     = $person.persNr_identificatiePS
+                EmployeeNumber = ($Contracts | Select-Object -First 1)[0].dv_opdrachtgeverNr_P01103 + '_' + $person.persNr_identificatiePS
+                DisplayName    = Get-DisplayName -Person $person
+                Contracts      = $Contracts
+            }
 
-            $displayName = $displayName + " " + "($externalID)"        
+            ## WRITE OUTPUT HIER
+            # Write-Output (
+            #     $person | ConvertTo-Json -Depth 10 -Compress
+            # )
+
+            $Persons.add($person)
         }
     }
-    $person.DisplayName = $displayName;
-
-    $json = $person | ConvertTo-Json -Depth 3
-    Write-Output $json
+    catch {
+        throw "Error gevonden in bestand '$($file.FullName)' ($($_))"
+    }
 }
 
-Write-Verbose -Verbose "Exported data to HelloID";
+Write-Verbose -Verbose "Exporting Data"
+
+Write-Output (
+    $Persons | ConvertTo-Json -Depth 10 -Compress
+)
+
+try {
+    # clean-up old files
+    $limit = (Get-Date).AddDays(-8)
+
+    # Delete files older than the $limit.
+    Get-ChildItem -Path $xmlPath -Force | Where-Object {
+        -Not $_.PSIsContainer -and $_.CreationTime -lt $limit
+    } | Remove-Item -Force
+}
+catch {
+    Write-Verbose -Verbose "oude bestanden konden niet verwijderd worden... morgen weer een kans"
+}
